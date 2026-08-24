@@ -18,7 +18,7 @@
     <div class="logo">
       <span class="logo-icon">⌨️</span>
       <h1>TypeSpeak</h1>
-      <span class="logo-tagline">Keyboard Sound &amp; Voice Studio</span>
+      <span class="logo-tagline">Text &amp; Voice Studio</span>
     </div>
     <div class="header-controls">
       <div class="control-group">
@@ -27,20 +27,29 @@
           <button class="voice-pill active" data-voice-type="default">Default</button>
           <button class="voice-pill" data-voice-type="male">Male</button>
           <button class="voice-pill" data-voice-type="female">Female</button>
-          <button class="voice-pill" data-voice-type="uk">British</button>
         </div>
       </div>
       <div class="control-group">
-        <label for="rate-slider">⚡ Speed</label>
-        <input type="range" id="rate-slider" min="0.5" max="4" step="0.1" value="1">
-        <span id="rate-val">1.0x</span>
+        <label>Speed</label>
+        <div class="speed-control" id="speed-control">
+          <button class="speed-display" id="speed-display">1x <span class="speed-arrow">▾</span></button>
+          <div class="speed-dropdown" id="speed-dropdown">
+            <div class="speed-panel-header">Playback speed</div>
+            <button class="speed-option" data-speed="0.5">0.5</button>
+            <button class="speed-option" data-speed="0.75">0.75</button>
+            <button class="speed-option active" data-speed="1">Normal</button>
+            <button class="speed-option" data-speed="1.25">1.25</button>
+            <button class="speed-option" data-speed="1.5">1.5</button>
+            <button class="speed-option" data-speed="1.75">1.75</button>
+            <button class="speed-option" data-speed="2">2</button>
+            <button class="speed-option" data-speed="2.5">2.5</button>
+            <button class="speed-option" data-speed="3">3</button>
+            <button class="speed-option" data-speed="3.5">3.5</button>
+            <button class="speed-option" data-speed="4">4</button>
+          </div>
+        </div>
       </div>
-      <div class="control-group">
-        <label for="pitch-slider">🎵 Pitch</label>
-        <input type="range" id="pitch-slider" min="0.5" max="2" step="0.1" value="1">
-        <span id="pitch-val">1.0</span>
-      </div>
-      <button class="btn-icon" id="sound-toggle" title="Toggle keyboard sounds">🔊</button>
+      <button class="btn-icon" id="sound-toggle" title="Toggle keyboard sounds" style="display:none">🔊</button>
     </div>
   </header>
 
@@ -56,7 +65,7 @@
           <span class="badge" id="char-count">0 chars</span>
         </div>
         <div class="editor-actions">
-          <button class="btn-sm" id="btn-speak-all" title="Speak entire text">▶ Speak All</button>
+          <button class="btn-sm" id="btn-speak-all" title="Speak entire text">Speak All</button>
           <button class="btn-sm" id="btn-toggle-keyboard" title="Show/hide keyboard">🎹 Keyboard</button>
           <button class="btn-sm btn-danger" id="btn-clear" title="Clear text">✕ Clear</button>
         </div>
@@ -64,15 +73,11 @@
       <div class="editor-body">
         <textarea
           id="text-input"
-          placeholder="Start typing...
-• Each key press plays a mechanical click sound
-• Press Enter → new line
-• Press Ctrl+Enter → speaks the current line aloud"
           spellcheck="true"
           autocomplete="off"
         ></textarea>
         <div class="editor-hint">
-          <kbd>Enter</kbd> New line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Speak line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>A</kbd> Speak all
+          <kbd>Enter</kbd> New line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Speak / Stop / Resume
         </div>
       </div>
 

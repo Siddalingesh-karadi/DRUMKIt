@@ -1,79 +1,55 @@
 /* ===================================================
    TypeSpeak – Main JavaScript
-   Keyboard Sound & TTS Studio
+   TTS Studio
    =================================================== */
 
 'use strict';
 
 // ──────────────────────────────────────────────────────
-// 1. WEB AUDIO ENGINE — Mechanical keyboard click synthesis
+// 1. CHARACTER PRONUNCIATION MAP
+//    Used when text is a single character with no 
+//    natural meaning — says the character name instead.
 // ──────────────────────────────────────────────────────
 
-let audioCtx = null;
-let soundEnabled = true;
-
-function getAudioCtx() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  // Resume if suspended (browser policy)
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
-}
+const CHAR_NAMES = {
+  'a':'ay', 'b':'bee', 'c':'see', 'd':'dee', 'e':'ee', 'f':'ef',
+  'g':'gee', 'h':'aitch', 'i':'eye', 'j':'jay', 'k':'kay', 'l':'el',
+  'm':'em', 'n':'en', 'o':'oh', 'p':'pee', 'q':'cue', 'r':'ar',
+  's':'ess', 't':'tee', 'u':'you', 'v':'vee', 'w':'double-you',
+  'x':'ex', 'y':'why', 'z':'zee',
+  '0':'zero','1':'one','2':'two','3':'three','4':'four',
+  '5':'five','6':'six','7':'seven','8':'eight','9':'nine',
+  ' ':'space', '.':'dot', ',':'comma', '!':'exclamation mark',
+  '?':'question mark', ':':'colon', ';':'semicolon', '-':'dash',
+  '_':'underscore', '@':'at', '#':'hash', '$':'dollar', '%':'percent',
+  '&':'and', '*':'asterisk', '(':'open paren', ')':'close paren',
+  '+':'plus', '=':'equals', '/':'slash', '\\':'backslash',
+  '<':'less than', '>':'greater than', '"':'quote', "'":"apostrophe",
+  '`':'backtick', '~':'tilde', '^':'caret', '{':'open brace',
+  '}':'close brace', '[':'open bracket', ']':'close bracket', '|':'pipe'
+};
 
 /**
- * Synthesises a mechanical keyboard click sound using the Web Audio API.
- * Layered white-noise burst + a short oscillator click for realism.
+ * Convert text to what should actually be spoken.
+ * - Single chars → pronounce the character name
+ * - Short all-non-letter strings → spell out each character
+ * - Otherwise → pass through as-is for normal TTS
  */
-function playKeyClick(type = 'normal') {
-  if (!soundEnabled) return;
-  try {
-    const ctx = getAudioCtx();
-    const now = ctx.currentTime;
+function prepareTextForSpeech(text) {
+  const t = text.trim();
+  if (!t) return '';
 
-    // --- Noise burst (body of click) ---
-    const bufferSize = ctx.sampleRate * 0.05;   // 50 ms
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
-
-    const noiseSource = ctx.createBufferSource();
-    noiseSource.buffer = buffer;
-
-    // High-pass filter gives it the "click" character
-    const hpFilter = ctx.createBiquadFilter();
-    hpFilter.type = 'highpass';
-    hpFilter.frequency.value = type === 'space' ? 600 : 1800;
-
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.18, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-
-    noiseSource.connect(hpFilter);
-    hpFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
-    noiseSource.start(now);
-    noiseSource.stop(now + 0.05);
-
-    // --- Short oscillator click (tactile snap) ---
-    const osc = ctx.createOscillator();
-    osc.type = 'square';
-    const baseFreq = type === 'enter' ? 320 : type === 'space' ? 260 : 480;
-    osc.frequency.setValueAtTime(baseFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(80, now + 0.015);
-
-    const oscGain = ctx.createGain();
-    oscGain.gain.setValueAtTime(0.1, now);
-    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
-
-    osc.connect(oscGain);
-    oscGain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.03);
-
-  } catch (e) {
-    console.warn('Audio error:', e);
+  // Single character
+  if (t.length === 1) {
+    return CHAR_NAMES[t.toLowerCase()] || t;
   }
+
+  // If every character is a non-letter (symbols/numbers only), spell it out
+  if (/^[^a-zA-Z]+$/.test(t) && t.length <= 6) {
+    return t.split('').map(ch => CHAR_NAMES[ch.toLowerCase()] || ch).join(', ');
+  }
+
+  return t;
 }
 
 // ──────────────────────────────────────────────────────
@@ -82,75 +58,108 @@ function playKeyClick(type = 'normal') {
 
 const synth = window.speechSynthesis;
 let voices = [];
-let currentVoiceType = 'default'; // 'default' | 'male' | 'female' | 'uk'
+let currentVoiceType = 'default';
 let currentUtterance = null;
 let isSpeaking = false;
 
-/** Pick a voice from available voices by type */
+// Resume-from-stop state
+let pausedText = null;      // the full original text being spoken
+let pausedCharIndex = 0;    // last word-boundary char index tracked via onboundary
+
 function pickVoice(type) {
   const all = synth.getVoices();
   if (!all.length) return null;
-
   const enVoices = all.filter(v => v.lang.startsWith('en'));
   const base = enVoices.length ? enVoices : all;
-
   switch (type) {
     case 'male':
-      return (
-        base.find(v => /david|james|daniel|male|guy|fred|bruce/i.test(v.name)) ||
-        base.find(v => v.lang === 'en-US') ||
-        base[0]
-      );
+      return base.find(v => /david|james|daniel|male|guy|fred|bruce/i.test(v.name))
+          || base.find(v => v.lang === 'en-US') || base[0];
     case 'female':
-      return (
-        base.find(v => /zira|samantha|victoria|karen|moira|fiona|google uk english female|female/i.test(v.name)) ||
-        base.find(v => /google/i.test(v.name)) ||
-        base[0]
-      );
-    case 'uk':
-      return (
-        base.find(v => v.lang === 'en-GB') ||
-        base.find(v => /british|uk|george|daniel/i.test(v.name)) ||
-        base[0]
-      );
-    case 'default':
+      return base.find(v => /zira|samantha|victoria|karen|moira|fiona|google uk english female|female/i.test(v.name))
+          || base.find(v => /google/i.test(v.name)) || base[0];
     default:
-      return (
-        base.find(v => /google us english/i.test(v.name)) ||
-        base.find(v => v.lang === 'en-US' && v.default) ||
-        base.find(v => v.lang === 'en-US') ||
-        base[0]
-      );
+      return base.find(v => /google us english/i.test(v.name))
+          || base.find(v => v.lang === 'en-US' && v.default)
+          || base.find(v => v.lang === 'en-US') || base[0];
   }
 }
 
-/** Populate voices list when browser is ready */
-function loadVoices() {
-  voices = synth.getVoices();
-}
-
+function loadVoices() { voices = synth.getVoices(); }
 synth.addEventListener('voiceschanged', loadVoices);
 loadVoices();
 
-/** Speak a given text string */
-function speakText(text) {
-  if (!text || text.trim().length === 0) return;
+// ──────────────────────────────────────────────────────
+// 3. SPEED CONTROL — dropdown popup
+// ──────────────────────────────────────────────────────
 
-  // Cancel any currently speaking utterance
+let currentRate = 1.0;
+
+const speedDisplay = document.getElementById('speed-display');
+const speedDropdown = document.getElementById('speed-dropdown');
+
+function setRate(val) {
+  currentRate = val;
+  const label = val === 1 ? 'Normal' : val + 'x';
+  speedDisplay.childNodes[0].textContent = label + ' ';
+  // Mark active option
+  document.querySelectorAll('.speed-option').forEach(btn => {
+    btn.classList.toggle('active', parseFloat(btn.dataset.speed) === val);
+  });
+  // If currently speaking → stop and resume from current position with new rate
+  if (isSpeaking && pausedText) {
+    const resumeFrom = pausedText.substring(pausedCharIndex).trim();
+    stopSpeaking(false); // stop without clearing paused state
+    if (resumeFrom.length > 0) speakRaw(resumeFrom);
+  }
+}
+
+// Toggle dropdown on speed display click
+speedDisplay.addEventListener('click', (e) => {
+  e.stopPropagation();
+  speedDropdown.classList.toggle('open');
+});
+
+// Select a speed option
+speedDropdown.addEventListener('click', (e) => {
+  const opt = e.target.closest('.speed-option');
+  if (!opt) return;
+  setRate(parseFloat(opt.dataset.speed));
+  speedDropdown.classList.remove('open');
+  textarea.focus();
+});
+
+// Close dropdown when clicking anywhere else
+document.addEventListener('click', () => {
+  speedDropdown.classList.remove('open');
+});
+
+// ──────────────────────────────────────────────────────
+// 4. SPEAK / STOP / RESUME
+// ──────────────────────────────────────────────────────
+
+/**
+ * Internal: speak raw pre-processed text (no char name conversion).
+ * Used for resume, where we already have processed text.
+ */
+function speakRaw(text) {
+  if (!text || text.trim().length === 0) return;
   if (synth.speaking) synth.cancel();
 
-  const rateSlider = document.getElementById('rate-slider');
-  const pitchSlider = document.getElementById('pitch-slider');
-
   const chosenVoice = pickVoice(currentVoiceType);
-
   const utterance = new SpeechSynthesisUtterance(text.trim());
   if (chosenVoice) utterance.voice = chosenVoice;
-  utterance.rate = parseFloat(rateSlider.value);
-  utterance.pitch = parseFloat(pitchSlider.value);
+  utterance.rate = currentRate;
+  utterance.pitch = 1;
   utterance.volume = 1;
 
   currentUtterance = utterance;
+  pausedText = text.trim();
+  pausedCharIndex = 0;
+
+  utterance.onboundary = (e) => {
+    if (e.name === 'word') pausedCharIndex = e.charIndex;
+  };
 
   utterance.onstart = () => {
     isSpeaking = true;
@@ -160,13 +169,20 @@ function speakText(text) {
 
   utterance.onend = () => {
     isSpeaking = false;
+    currentUtterance = null;
+    pausedText = null;
+    pausedCharIndex = 0;
     hideSpeakStatus();
     highlightEnterKey(false);
     addToHistory(text.trim());
   };
 
   utterance.onerror = (e) => {
+    if (e.error === 'interrupted') return; // intentional cancel, don't clear paused state
     isSpeaking = false;
+    currentUtterance = null;
+    pausedText = null;
+    pausedCharIndex = 0;
     hideSpeakStatus();
     highlightEnterKey(false);
     console.warn('Speech error:', e.error);
@@ -175,24 +191,44 @@ function speakText(text) {
   synth.speak(utterance);
 }
 
-function stopSpeaking() {
-  if (synth.speaking) {
-    synth.cancel();
+/**
+ * Public: speak text, applying character name conversion first.
+ * Clears any paused/resume state.
+ */
+function speakText(text) {
+  if (!text || text.trim().length === 0) return;
+  pausedText = null;
+  pausedCharIndex = 0;
+  const processed = prepareTextForSpeech(text);
+  speakRaw(processed);
+}
+
+/**
+ * Stop speaking.
+ * @param {boolean} savePosition – if true, saves position for resume
+ */
+function stopSpeaking(savePosition = false) {
+  if (!savePosition) {
+    pausedText = null;
+    pausedCharIndex = 0;
   }
+  // If saving: pausedText + pausedCharIndex are already up to date
+  if (synth.speaking) synth.cancel();
   isSpeaking = false;
+  currentUtterance = null;
   hideSpeakStatus();
   highlightEnterKey(false);
 }
 
 // ──────────────────────────────────────────────────────
-// 3. UI HELPERS
+// 5. UI HELPERS
 // ──────────────────────────────────────────────────────
 
 const speakStatus = document.getElementById('speak-status');
 const speakTextDisplay = document.getElementById('speak-text-display');
 
 function showSpeakStatus(text) {
-  speakTextDisplay.textContent = '🗣 ' + text;
+  speakTextDisplay.textContent = text;
   speakStatus.classList.add('active');
   document.querySelector('.editor-panel').classList.add('speaking-border');
 }
@@ -210,12 +246,8 @@ function highlightEnterKey(active) {
   else enterKey.classList.remove('speaking');
 }
 
-/** Animate keyboard key visually */
 function animateKey(keyValue) {
-  // Normalize to lowercase for letter keys
   const normalized = keyValue.length === 1 ? keyValue.toLowerCase() : keyValue;
-
-  // Find matching key element(s)
   const keyEls = document.querySelectorAll(`[data-key="${CSS.escape(normalized)}"]`);
   keyEls.forEach(el => {
     el.classList.add('pressed');
@@ -223,7 +255,6 @@ function animateKey(keyValue) {
   });
 }
 
-/** Update word / char counters */
 function updateCounts(text) {
   const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
   const chars = text.length;
@@ -232,13 +263,12 @@ function updateCounts(text) {
 }
 
 // ──────────────────────────────────────────────────────
-// 4. HISTORY
+// 6. HISTORY (with per-item delete)
 // ──────────────────────────────────────────────────────
 
 const historyList = document.getElementById('history-list');
 
 function addToHistory(text) {
-  // Remove empty placeholder
   const emptyItem = historyList.querySelector('.history-empty');
   if (emptyItem) emptyItem.remove();
 
@@ -251,61 +281,84 @@ function addToHistory(text) {
     <span class="hi-icon">🔊</span>
     <span class="hi-text">${escapeHtml(text)}</span>
     <span class="hi-time">${timeStr}</span>
+    <button class="hi-delete" title="Delete" aria-label="Delete">✕</button>
   `;
 
-  // Click to re-speak
-  li.addEventListener('click', () => speakText(text));
+  li.querySelector('.hi-text').addEventListener('click', () => speakText(text));
+  li.querySelector('.hi-icon').addEventListener('click', () => speakText(text));
+  li.querySelector('.hi-delete').addEventListener('click', (e) => {
+    e.stopPropagation();
+    li.style.animation = 'fade-out 0.2s ease forwards';
+    setTimeout(() => {
+      li.remove();
+      if (historyList.children.length === 0) {
+        historyList.innerHTML = '<li class="history-empty">Spoken lines will appear here…</li>';
+      }
+    }, 200);
+  });
 
-  // Prepend (newest at top)
   historyList.insertBefore(li, historyList.firstChild);
-
-  // Cap at 50 items
-  while (historyList.children.length > 50) {
-    historyList.removeChild(historyList.lastChild);
-  }
+  while (historyList.children.length > 50) historyList.removeChild(historyList.lastChild);
 }
 
 function escapeHtml(str) {
   return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 // ──────────────────────────────────────────────────────
-// 5. MAIN KEYBOARD EVENT HANDLER
+// 7. MAIN KEYBOARD EVENT HANDLER
 // ──────────────────────────────────────────────────────
 
 const textarea = document.getElementById('text-input');
 
 textarea.addEventListener('keydown', function (e) {
-
   const key = e.key;
 
-  // ─── Enter → insert newline (no speak) ───────────────
+  // ─── Enter → new line ──────────────────────────────
   if (key === 'Enter' && !e.ctrlKey) {
-    // Default behavior: new line. Just play sound and animate.
-    playKeyClick('enter');
     animateKey('Enter');
-    // Let browser insert the newline naturally
     updateCounts(this.value);
     return;
   }
 
-  // ─── Ctrl + Enter → speak current line ──────────────
+  // ─── Ctrl + Enter → Speak / Stop / Resume ──────────
   if (e.ctrlKey && key === 'Enter') {
     e.preventDefault();
-
-    playKeyClick('enter');
     animateKey('Enter');
 
-    // Get the text on the current line (up to cursor)
+    // ① Currently speaking → STOP and save position for resume
+    if (isSpeaking) {
+      stopSpeaking(true); // save position
+      return;
+    }
+
+    // ② Was stopped mid-way → RESUME from saved position
+    if (pausedText !== null) {
+      const resumeFrom = pausedText.substring(pausedCharIndex);
+      if (resumeFrom.trim().length > 0) {
+        // Reset paused state before resuming so onend can clear it properly
+        const textToResume = resumeFrom.trim();
+        pausedText = null;
+        pausedCharIndex = 0;
+        speakRaw(textToResume);
+        return;
+      }
+      // Nothing left to resume, fall through to speak fresh
+      pausedText = null;
+      pausedCharIndex = 0;
+    }
+
+    // ③ Fresh speak — selected text first, then current line
+    const selectedText = this.value.substring(this.selectionStart, this.selectionEnd).trim();
+    if (selectedText.length > 0) {
+      speakText(selectedText);
+      return;
+    }
+
     const cursorPos = this.selectionStart;
     const textBefore = this.value.substring(0, cursorPos);
-
-    // Find the last line
     const lines = textBefore.split('\n');
     const currentLine = lines[lines.length - 1].trim();
 
@@ -318,142 +371,72 @@ textarea.addEventListener('keydown', function (e) {
     return;
   }
 
-  // ─── Ctrl + A → speak all text ──────────────────────
-  if (e.ctrlKey && (key === 'a' || key === 'A')) {
-    // Let default select-all happen; but also speak if desired
-    // Only speak if user pressed Ctrl+A with intent (non-default)
-    // We'll leave default behavior; user can use the Speak All button
-    return;
-  }
-
-  // ─── Space → click sound ─────────────────────────────
-  if (key === ' ') {
-    playKeyClick('space');
-    animateKey(' ');
-    updateCounts(this.value + ' ');
-    return;
-  }
-
-  // ─── Backspace ─────────────────────────────────────
-  if (key === 'Backspace') {
-    playKeyClick('normal');
-    animateKey('Backspace');
-    // Let default backspace behavior happen; count updated on input event
-    return;
-  }
-
-  // ─── Regular character keys ──────────────────────────
+  // ─── Regular key → just animate ────────────────────
   if (key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    playKeyClick('normal');
     animateKey(key);
-  } else {
-    // Non-character keys (Shift, Tab, etc.) - still animate, no sound for modifiers
-    if (!['Control', 'Alt', 'Meta', 'Shift', 'CapsLock'].includes(key)) {
-      playKeyClick('normal');
-    }
+  } else if (!['Control', 'Alt', 'Meta', 'Shift', 'CapsLock'].includes(key)) {
     animateKey(key);
   }
 });
 
-// Update counts on every input change
 textarea.addEventListener('input', function () {
   updateCounts(this.value);
-});
-
-// ──────────────────────────────────────────────────────
-// 6. PHYSICAL KEYBOARD → KEYBOARD VISUAL (outside textarea)
-// ──────────────────────────────────────────────────────
-
-// Also animate keyboard keys even when textarea might not be focused
-document.addEventListener('keydown', function (e) {
-  // Prevent double-animation for textarea (it's handled above)
-  if (document.activeElement === textarea) return;
-
-  const key = e.key;
-  if (!['Control', 'Alt', 'Meta', 'Shift', 'CapsLock'].includes(key)) {
-    playKeyClick(key === 'Enter' ? 'enter' : key === ' ' ? 'space' : 'normal');
+  // If user starts typing new content, clear paused resume state
+  if (!isSpeaking) {
+    pausedText = null;
+    pausedCharIndex = 0;
   }
-  animateKey(key);
 });
 
 // ──────────────────────────────────────────────────────
-// 7. BUTTON CONTROLS
+// 8. PHYSICAL KEYBOARD → KEYBOARD VISUAL
 // ──────────────────────────────────────────────────────
 
-// Sound toggle
-const soundToggleBtn = document.getElementById('sound-toggle');
-soundToggleBtn.addEventListener('click', () => {
-  soundEnabled = !soundEnabled;
-  soundToggleBtn.textContent = soundEnabled ? '🔊' : '🔇';
-  soundToggleBtn.classList.toggle('muted', !soundEnabled);
+document.addEventListener('keydown', function (e) {
+  if (document.activeElement === textarea) return;
+  const key = e.key;
+  if (!['Control', 'Alt', 'Meta', 'Shift', 'CapsLock'].includes(key)) animateKey(key);
 });
 
-// Speak All button
+// ──────────────────────────────────────────────────────
+// 9. BUTTON CONTROLS
+// ──────────────────────────────────────────────────────
+
+// Speak All — respects selection
 document.getElementById('btn-speak-all').addEventListener('click', () => {
-  const text = textarea.value.trim();
+  const selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd).trim();
+  const text = selectedText.length > 0 ? selectedText : textarea.value.trim();
   if (text.length > 0) speakText(text);
 });
 
-// Clear button
+// Clear
 document.getElementById('btn-clear').addEventListener('click', () => {
   textarea.value = '';
   updateCounts('');
-  stopSpeaking();
+  stopSpeaking(false);
   textarea.focus();
 });
 
-// Stop speaking button
-document.getElementById('btn-stop-speak').addEventListener('click', () => {
-  stopSpeaking();
-});
+// Stop
+document.getElementById('btn-stop-speak').addEventListener('click', () => stopSpeaking(true));
 
-// Clear history button
+// Clear history
 document.getElementById('btn-clear-history').addEventListener('click', () => {
   historyList.innerHTML = '<li class="history-empty">Spoken lines will appear here…</li>';
 });
 
-// Rate slider — update display and re-speak in real-time if speaking
-const rateSlider = document.getElementById('rate-slider');
-const rateVal = document.getElementById('rate-val');
-rateSlider.addEventListener('input', () => {
-  const v = parseFloat(rateSlider.value);
-  rateVal.textContent = v.toFixed(1) + 'x';
-  // If currently speaking, restart with new rate
-  if (isSpeaking && currentUtterance) {
-    const remaining = currentUtterance.text;
-    speakText(remaining);
-  }
-});
-
-// Pitch slider — update display and re-speak in real-time if speaking
-const pitchSlider = document.getElementById('pitch-slider');
-const pitchVal = document.getElementById('pitch-val');
-pitchSlider.addEventListener('input', () => {
-  const v = parseFloat(pitchSlider.value);
-  pitchVal.textContent = v.toFixed(1);
-  if (isSpeaking && currentUtterance) {
-    const remaining = currentUtterance.text;
-    speakText(remaining);
-  }
-});
-
 // ──────────────────────────────────────────────────────
-// 8. VISUAL KEYBOARD CLICK (mouse click on key)
+// 10. VISUAL KEYBOARD CLICK
 // ──────────────────────────────────────────────────────
 
 document.getElementById('keyboard-wrap').addEventListener('click', function (e) {
   const keyEl = e.target.closest('.key');
   if (!keyEl) return;
-
   const keyData = keyEl.dataset.key;
   if (!keyData) return;
 
-  playKeyClick(keyData === 'Enter' ? 'enter' : keyData === ' ' ? 'space' : 'normal');
-
-  // Insert the character into textarea if it's a typeable character
   if (keyData.length === 1) {
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = textarea.selectionStart, end = textarea.selectionEnd;
     textarea.value = textarea.value.substring(0, start) + keyData + textarea.value.substring(end);
     textarea.selectionStart = textarea.selectionEnd = start + keyData.length;
     updateCounts(textarea.value);
@@ -470,9 +453,7 @@ document.getElementById('keyboard-wrap').addEventListener('click', function (e) 
       updateCounts(textarea.value);
     }
   } else if (keyData === 'Enter') {
-    // On-screen Enter = new line (Ctrl+Enter to speak)
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    const start = textarea.selectionStart, end = textarea.selectionEnd;
     textarea.value = textarea.value.substring(0, start) + '\n' + textarea.value.substring(end);
     textarea.selectionStart = textarea.selectionEnd = start + 1;
     updateCounts(textarea.value);
@@ -482,24 +463,18 @@ document.getElementById('keyboard-wrap').addEventListener('click', function (e) 
   animateKey(keyData);
 });
 
-// Keyboard toggle button
+// Keyboard toggle
 document.getElementById('btn-toggle-keyboard').addEventListener('click', () => {
   const panel = document.getElementById('keyboard-panel');
   const btn = document.getElementById('btn-toggle-keyboard');
   const isHidden = panel.classList.contains('hidden');
-  if (isHidden) {
-    panel.classList.remove('hidden');
-    panel.classList.add('visible');
-    btn.classList.add('btn-primary');
-  } else {
-    panel.classList.add('hidden');
-    panel.classList.remove('visible');
-    btn.classList.remove('btn-primary');
-  }
+  panel.classList.toggle('hidden', !isHidden);
+  panel.classList.toggle('visible', isHidden);
+  btn.classList.toggle('btn-primary', isHidden);
   textarea.focus();
 });
 
-// Voice pill selection
+// Voice pills
 document.getElementById('voice-pills').addEventListener('click', (e) => {
   const pill = e.target.closest('.voice-pill');
   if (!pill) return;
@@ -509,12 +484,12 @@ document.getElementById('voice-pills').addEventListener('click', (e) => {
 });
 
 // ──────────────────────────────────────────────────────
-// 9. INIT
+// 11. INIT
 // ──────────────────────────────────────────────────────
 
-// Focus textarea on load
 window.addEventListener('load', () => {
   textarea.focus();
   loadVoices();
   updateCounts('');
+  setRate(1.0);
 });
