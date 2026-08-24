@@ -145,6 +145,40 @@ body {
 
 .control-group select:focus { border-color: var(--accent-cyan); }
 
+/* Voice Pills */
+.voice-pills {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.voice-pill {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 0.75rem;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.voice-pill:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  background: rgba(88,200,255,0.08);
+}
+
+.voice-pill.active {
+  background: rgba(88,200,255,0.18);
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
 .control-group input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -425,6 +459,17 @@ kbd {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  transition: var(--transition-slow);
+}
+
+/* Hidden / visible toggle */
+.keyboard-panel.hidden {
+  display: none;
+}
+
+.keyboard-panel.visible {
+  display: block;
+  animation: slide-down 0.25s ease;
 }
 
 .keyboard-header {
@@ -610,7 +655,7 @@ kbd {
 .app-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 14px 28px;
   border-top: 1px solid var(--border);
   font-size: 0.8rem;
@@ -628,6 +673,11 @@ kbd {
 @keyframes glow-pulse {
   0%, 100% { box-shadow: 0 0 8px rgba(88,200,255,0.3); }
   50%       { box-shadow: 0 0 20px rgba(88,200,255,0.7); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .speaking-border { animation: glow-pulse 1s ease-in-out infinite; }

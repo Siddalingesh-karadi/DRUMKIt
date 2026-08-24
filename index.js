@@ -82,38 +82,51 @@ function playKeyClick(type = 'normal') {
 
 const synth = window.speechSynthesis;
 let voices = [];
+let currentVoiceType = 'default'; // 'default' | 'male' | 'female' | 'uk'
 let currentUtterance = null;
 let isSpeaking = false;
 
-/** Populate the voice dropdown */
+/** Pick a voice from available voices by type */
+function pickVoice(type) {
+  const all = synth.getVoices();
+  if (!all.length) return null;
+
+  const enVoices = all.filter(v => v.lang.startsWith('en'));
+  const base = enVoices.length ? enVoices : all;
+
+  switch (type) {
+    case 'male':
+      return (
+        base.find(v => /david|james|daniel|male|guy|fred|bruce/i.test(v.name)) ||
+        base.find(v => v.lang === 'en-US') ||
+        base[0]
+      );
+    case 'female':
+      return (
+        base.find(v => /zira|samantha|victoria|karen|moira|fiona|google uk english female|female/i.test(v.name)) ||
+        base.find(v => /google/i.test(v.name)) ||
+        base[0]
+      );
+    case 'uk':
+      return (
+        base.find(v => v.lang === 'en-GB') ||
+        base.find(v => /british|uk|george|daniel/i.test(v.name)) ||
+        base[0]
+      );
+    case 'default':
+    default:
+      return (
+        base.find(v => /google us english/i.test(v.name)) ||
+        base.find(v => v.lang === 'en-US' && v.default) ||
+        base.find(v => v.lang === 'en-US') ||
+        base[0]
+      );
+  }
+}
+
+/** Populate voices list when browser is ready */
 function loadVoices() {
   voices = synth.getVoices();
-  const select = document.getElementById('voice-select');
-  if (!select) return;
-
-  const prevValue = select.value;
-  select.innerHTML = '';
-
-  // Prefer English voices first
-  const sorted = [...voices].sort((a, b) => {
-    const aEn = a.lang.startsWith('en') ? 0 : 1;
-    const bEn = b.lang.startsWith('en') ? 0 : 1;
-    return aEn - bEn;
-  });
-
-  sorted.forEach((voice, i) => {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = `${voice.name} (${voice.lang})`;
-    if (prevValue !== '' && parseInt(prevValue) === i) opt.selected = true;
-    select.appendChild(opt);
-  });
-
-  // Auto-select a nice default en-US voice
-  if (!prevValue) {
-    const defaultIdx = sorted.findIndex(v => v.lang === 'en-US' && /Google|Samantha|Alex|Zira/i.test(v.name));
-    if (defaultIdx !== -1) select.value = defaultIdx;
-  }
 }
 
 synth.addEventListener('voiceschanged', loadVoices);
@@ -126,12 +139,10 @@ function speakText(text) {
   // Cancel any currently speaking utterance
   if (synth.speaking) synth.cancel();
 
-  const select = document.getElementById('voice-select');
   const rateSlider = document.getElementById('rate-slider');
   const pitchSlider = document.getElementById('pitch-slider');
 
-  const voiceIdx = parseInt(select.value);
-  const chosenVoice = voices[voiceIdx] || null;
+  const chosenVoice = pickVoice(currentVoiceType);
 
   const utterance = new SpeechSynthesisUtterance(text.trim());
   if (chosenVoice) utterance.voice = chosenVoice;
@@ -273,25 +284,18 @@ textarea.addEventListener('keydown', function (e) {
 
   const key = e.key;
 
-  // ─── Ctrl + Enter → insert newline (no speak) ───────
-  if (e.ctrlKey && key === 'Enter') {
-    e.preventDefault();
-
+  // ─── Enter → insert newline (no speak) ───────────────
+  if (key === 'Enter' && !e.ctrlKey) {
+    // Default behavior: new line. Just play sound and animate.
     playKeyClick('enter');
     animateKey('Enter');
-
-    // Insert a newline at cursor position
-    const start = this.selectionStart;
-    const end = this.selectionEnd;
-    this.value = this.value.substring(0, start) + '\n' + this.value.substring(end);
-    this.selectionStart = this.selectionEnd = start + 1;
-
+    // Let browser insert the newline naturally
     updateCounts(this.value);
     return;
   }
 
-  // ─── Enter → speak current / last line ──────────────
-  if (key === 'Enter' && !e.ctrlKey) {
+  // ─── Ctrl + Enter → speak current line ──────────────
+  if (e.ctrlKey && key === 'Enter') {
     e.preventDefault();
 
     playKeyClick('enter');
@@ -308,7 +312,6 @@ textarea.addEventListener('keydown', function (e) {
     if (currentLine.length > 0) {
       speakText(currentLine);
     } else if (this.value.trim().length > 0) {
-      // Fallback: speak all text if current line is empty
       speakText(this.value.trim());
     }
 
@@ -409,18 +412,29 @@ document.getElementById('btn-clear-history').addEventListener('click', () => {
   historyList.innerHTML = '<li class="history-empty">Spoken lines will appear here…</li>';
 });
 
-// Rate slider
+// Rate slider — update display and re-speak in real-time if speaking
 const rateSlider = document.getElementById('rate-slider');
 const rateVal = document.getElementById('rate-val');
 rateSlider.addEventListener('input', () => {
-  rateVal.textContent = parseFloat(rateSlider.value).toFixed(1) + 'x';
+  const v = parseFloat(rateSlider.value);
+  rateVal.textContent = v.toFixed(1) + 'x';
+  // If currently speaking, restart with new rate
+  if (isSpeaking && currentUtterance) {
+    const remaining = currentUtterance.text;
+    speakText(remaining);
+  }
 });
 
-// Pitch slider
+// Pitch slider — update display and re-speak in real-time if speaking
 const pitchSlider = document.getElementById('pitch-slider');
 const pitchVal = document.getElementById('pitch-val');
 pitchSlider.addEventListener('input', () => {
-  pitchVal.textContent = parseFloat(pitchSlider.value).toFixed(1);
+  const v = parseFloat(pitchSlider.value);
+  pitchVal.textContent = v.toFixed(1);
+  if (isSpeaking && currentUtterance) {
+    const remaining = currentUtterance.text;
+    speakText(remaining);
+  }
 });
 
 // ──────────────────────────────────────────────────────
@@ -456,15 +470,42 @@ document.getElementById('keyboard-wrap').addEventListener('click', function (e) 
       updateCounts(textarea.value);
     }
   } else if (keyData === 'Enter') {
-    const cursorPos = textarea.selectionStart;
-    const textBefore = textarea.value.substring(0, cursorPos);
-    const lines = textBefore.split('\n');
-    const currentLine = lines[lines.length - 1].trim();
-    if (currentLine.length > 0) speakText(currentLine);
+    // On-screen Enter = new line (Ctrl+Enter to speak)
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    textarea.value = textarea.value.substring(0, start) + '\n' + textarea.value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + 1;
+    updateCounts(textarea.value);
   }
 
   textarea.focus();
   animateKey(keyData);
+});
+
+// Keyboard toggle button
+document.getElementById('btn-toggle-keyboard').addEventListener('click', () => {
+  const panel = document.getElementById('keyboard-panel');
+  const btn = document.getElementById('btn-toggle-keyboard');
+  const isHidden = panel.classList.contains('hidden');
+  if (isHidden) {
+    panel.classList.remove('hidden');
+    panel.classList.add('visible');
+    btn.classList.add('btn-primary');
+  } else {
+    panel.classList.add('hidden');
+    panel.classList.remove('visible');
+    btn.classList.remove('btn-primary');
+  }
+  textarea.focus();
+});
+
+// Voice pill selection
+document.getElementById('voice-pills').addEventListener('click', (e) => {
+  const pill = e.target.closest('.voice-pill');
+  if (!pill) return;
+  document.querySelectorAll('.voice-pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  currentVoiceType = pill.dataset.voiceType;
 });
 
 // ──────────────────────────────────────────────────────

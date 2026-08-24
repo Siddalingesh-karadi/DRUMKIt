@@ -22,12 +22,17 @@
     </div>
     <div class="header-controls">
       <div class="control-group">
-        <label for="voice-select">🗣️ Voice</label>
-        <select id="voice-select"></select>
+        <label>🗣️ Voice</label>
+        <div class="voice-pills" id="voice-pills">
+          <button class="voice-pill active" data-voice-type="default">Default</button>
+          <button class="voice-pill" data-voice-type="male">Male</button>
+          <button class="voice-pill" data-voice-type="female">Female</button>
+          <button class="voice-pill" data-voice-type="uk">British</button>
+        </div>
       </div>
       <div class="control-group">
         <label for="rate-slider">⚡ Speed</label>
-        <input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1">
+        <input type="range" id="rate-slider" min="0.5" max="4" step="0.1" value="1">
         <span id="rate-val">1.0x</span>
       </div>
       <div class="control-group">
@@ -52,21 +57,22 @@
         </div>
         <div class="editor-actions">
           <button class="btn-sm" id="btn-speak-all" title="Speak entire text">▶ Speak All</button>
+          <button class="btn-sm" id="btn-toggle-keyboard" title="Show/hide keyboard">🎹 Keyboard</button>
           <button class="btn-sm btn-danger" id="btn-clear" title="Clear text">✕ Clear</button>
         </div>
       </div>
       <div class="editor-body">
         <textarea
           id="text-input"
-          placeholder="Start typing... 
+          placeholder="Start typing...
 • Each key press plays a mechanical click sound
-• Press Enter → speaks the current line
-• Press Ctrl+Enter → adds a new line without speaking"
+• Press Enter → new line
+• Press Ctrl+Enter → speaks the current line aloud"
           spellcheck="true"
           autocomplete="off"
         ></textarea>
         <div class="editor-hint">
-          <kbd>Enter</kbd> Speak line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> New line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>A</kbd> Speak all
+          <kbd>Enter</kbd> New line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Speak line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>A</kbd> Speak all
         </div>
       </div>
 
@@ -81,7 +87,7 @@
     </section>
 
     <!-- Keyboard Visual -->
-    <section class="keyboard-panel">
+    <section class="keyboard-panel hidden" id="keyboard-panel">
       <div class="keyboard-header">
         <span class="keyboard-title">🎹 Keyboard</span>
         <span class="keyboard-hint">Keys light up as you type</span>
@@ -210,7 +216,6 @@
   </main>
 
   <footer class="app-footer">
-    <span>⌨️ TypeSpeak — Keyboard Sound &amp; TTS Studio</span>
     <span>❤️ From PESITM</span>
   </footer>
 
