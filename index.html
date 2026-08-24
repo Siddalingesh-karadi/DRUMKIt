@@ -3,29 +3,217 @@
 
 <head>
   <meta charset="utf-8">
-  <title>Drum Kit</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TypeSpeak – Keyboard Sound & TTS Studio</title>
+  <meta name="description" content="A keyboard sound and text-to-speech studio. Type with satisfying mechanical sounds and press Enter to hear your words spoken aloud.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link href="https://fonts.googleapis.com/css?family=Arvo" rel="stylesheet">
 </head>
 
 <body>
 
-  <h1 id="title">Drum 🥁 Kit</h1>
-  <div class="set">
-    <button class="w drum">w</button>
-    <button class="a drum">a</button>
-    <button class="s drum">s</button>
-    <button class="d drum">d</button>
-    <button class="j drum">j</button>
-    <button class="k drum">k</button>
-    <button class="l drum">l</button>
-  </div>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="logo">
+      <span class="logo-icon">⌨️</span>
+      <h1>TypeSpeak</h1>
+      <span class="logo-tagline">Keyboard Sound &amp; Voice Studio</span>
+    </div>
+    <div class="header-controls">
+      <div class="control-group">
+        <label for="voice-select">🗣️ Voice</label>
+        <select id="voice-select"></select>
+      </div>
+      <div class="control-group">
+        <label for="rate-slider">⚡ Speed</label>
+        <input type="range" id="rate-slider" min="0.5" max="2" step="0.1" value="1">
+        <span id="rate-val">1.0x</span>
+      </div>
+      <div class="control-group">
+        <label for="pitch-slider">🎵 Pitch</label>
+        <input type="range" id="pitch-slider" min="0.5" max="2" step="0.1" value="1">
+        <span id="pitch-val">1.0</span>
+      </div>
+      <button class="btn-icon" id="sound-toggle" title="Toggle keyboard sounds">🔊</button>
+    </div>
+  </header>
 
+  <!-- Main Studio -->
+  <main class="studio">
 
-  <footer>
-    ❤️ From PESITM  
+    <!-- Text Editor Panel -->
+    <section class="editor-panel">
+      <div class="editor-header">
+        <span class="editor-title">📝 Text Input</span>
+        <div class="editor-badges">
+          <span class="badge" id="word-count">0 words</span>
+          <span class="badge" id="char-count">0 chars</span>
+        </div>
+        <div class="editor-actions">
+          <button class="btn-sm" id="btn-speak-all" title="Speak entire text">▶ Speak All</button>
+          <button class="btn-sm btn-danger" id="btn-clear" title="Clear text">✕ Clear</button>
+        </div>
+      </div>
+      <div class="editor-body">
+        <textarea
+          id="text-input"
+          placeholder="Start typing... 
+• Each key press plays a mechanical click sound
+• Press Enter → speaks the current line
+• Press Ctrl+Enter → adds a new line without speaking"
+          spellcheck="true"
+          autocomplete="off"
+        ></textarea>
+        <div class="editor-hint">
+          <kbd>Enter</kbd> Speak line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>Enter</kbd> New line &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>A</kbd> Speak all
+        </div>
+      </div>
+
+      <!-- Speaking status -->
+      <div class="speak-status" id="speak-status">
+        <div class="speak-wave" id="speak-wave">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <span id="speak-text-display"></span>
+        <button class="btn-icon" id="btn-stop-speak" title="Stop speaking">⏹</button>
+      </div>
+    </section>
+
+    <!-- Keyboard Visual -->
+    <section class="keyboard-panel">
+      <div class="keyboard-header">
+        <span class="keyboard-title">🎹 Keyboard</span>
+        <span class="keyboard-hint">Keys light up as you type</span>
+      </div>
+      <div class="keyboard-wrap" id="keyboard-wrap">
+
+        <!-- Row 1: Function keys -->
+        <div class="key-row row-fn">
+          <div class="key key-esc" data-key="Escape">Esc</div>
+          <div class="key-gap"></div>
+          <div class="key key-fn" data-key="F1">F1</div>
+          <div class="key key-fn" data-key="F2">F2</div>
+          <div class="key key-fn" data-key="F3">F3</div>
+          <div class="key key-fn" data-key="F4">F4</div>
+          <div class="key-gap"></div>
+          <div class="key key-fn" data-key="F5">F5</div>
+          <div class="key key-fn" data-key="F6">F6</div>
+          <div class="key key-fn" data-key="F7">F7</div>
+          <div class="key key-fn" data-key="F8">F8</div>
+          <div class="key-gap"></div>
+          <div class="key key-fn" data-key="F9">F9</div>
+          <div class="key key-fn" data-key="F10">F10</div>
+          <div class="key key-fn" data-key="F11">F11</div>
+          <div class="key key-fn" data-key="F12">F12</div>
+        </div>
+
+        <!-- Row 2: Number row -->
+        <div class="key-row">
+          <div class="key" data-key="`">~</div>
+          <div class="key" data-key="1">1</div>
+          <div class="key" data-key="2">2</div>
+          <div class="key" data-key="3">3</div>
+          <div class="key" data-key="4">4</div>
+          <div class="key" data-key="5">5</div>
+          <div class="key" data-key="6">6</div>
+          <div class="key" data-key="7">7</div>
+          <div class="key" data-key="8">8</div>
+          <div class="key" data-key="9">9</div>
+          <div class="key" data-key="0">0</div>
+          <div class="key" data-key="-">-</div>
+          <div class="key" data-key="=">=</div>
+          <div class="key key-wide" data-key="Backspace">⌫ Back</div>
+        </div>
+
+        <!-- Row 3: QWERTY -->
+        <div class="key-row">
+          <div class="key key-wide" data-key="Tab">Tab ⇥</div>
+          <div class="key key-letter" data-key="q">Q</div>
+          <div class="key key-letter" data-key="w">W</div>
+          <div class="key key-letter" data-key="e">E</div>
+          <div class="key key-letter" data-key="r">R</div>
+          <div class="key key-letter" data-key="t">T</div>
+          <div class="key key-letter" data-key="y">Y</div>
+          <div class="key key-letter" data-key="u">U</div>
+          <div class="key key-letter" data-key="i">I</div>
+          <div class="key key-letter" data-key="o">O</div>
+          <div class="key key-letter" data-key="p">P</div>
+          <div class="key" data-key="[">[</div>
+          <div class="key" data-key="]">]</div>
+          <div class="key key-wide" data-key="\">\</div>
+        </div>
+
+        <!-- Row 4: ASDF -->
+        <div class="key-row">
+          <div class="key key-wider" data-key="CapsLock">Caps ⇪</div>
+          <div class="key key-letter" data-key="a">A</div>
+          <div class="key key-letter" data-key="s">S</div>
+          <div class="key key-letter" data-key="d">D</div>
+          <div class="key key-letter" data-key="f">F</div>
+          <div class="key key-letter" data-key="g">G</div>
+          <div class="key key-letter" data-key="h">H</div>
+          <div class="key key-letter" data-key="j">J</div>
+          <div class="key key-letter" data-key="k">K</div>
+          <div class="key key-letter" data-key="l">L</div>
+          <div class="key" data-key=";">;</div>
+          <div class="key" data-key="'">'</div>
+          <div class="key key-wider" data-key="Enter" id="key-enter">Enter ↵</div>
+        </div>
+
+        <!-- Row 5: ZXCV -->
+        <div class="key-row">
+          <div class="key key-widest" data-key="Shift">⇧ Shift</div>
+          <div class="key key-letter" data-key="z">Z</div>
+          <div class="key key-letter" data-key="x">X</div>
+          <div class="key key-letter" data-key="c">C</div>
+          <div class="key key-letter" data-key="v">V</div>
+          <div class="key key-letter" data-key="b">B</div>
+          <div class="key key-letter" data-key="n">N</div>
+          <div class="key key-letter" data-key="m">M</div>
+          <div class="key" data-key=",">,</div>
+          <div class="key" data-key=".">.</div>
+          <div class="key" data-key="/">/</div>
+          <div class="key key-widest" data-key="Shift">⇧ Shift</div>
+        </div>
+
+        <!-- Row 6: Bottom row -->
+        <div class="key-row">
+          <div class="key key-mod" data-key="Control">Ctrl</div>
+          <div class="key key-mod" data-key="Meta">⌘ Win</div>
+          <div class="key key-mod" data-key="Alt">Alt</div>
+          <div class="key key-space" data-key=" ">Space Bar</div>
+          <div class="key key-mod" data-key="Alt">Alt</div>
+          <div class="key key-mod" data-key="Control">Ctrl</div>
+          <div class="key key-arrow" data-key="ArrowLeft">◀</div>
+          <div class="key key-arrows-ud">
+            <div class="key key-arrow inner" data-key="ArrowUp">▲</div>
+            <div class="key key-arrow inner" data-key="ArrowDown">▼</div>
+          </div>
+          <div class="key key-arrow" data-key="ArrowRight">▶</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- History Panel -->
+    <section class="history-panel">
+      <div class="history-header">
+        <span>📜 Spoken Lines</span>
+        <button class="btn-sm" id="btn-clear-history">Clear</button>
+      </div>
+      <ul class="history-list" id="history-list">
+        <li class="history-empty">Spoken lines will appear here…</li>
+      </ul>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <span>⌨️ TypeSpeak — Keyboard Sound &amp; TTS Studio</span>
+    <span>❤️ From PESITM</span>
   </footer>
-  
+
   <script src="index.js"></script>
 </body>
 
